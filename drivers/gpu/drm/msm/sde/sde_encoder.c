@@ -1002,6 +1002,7 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc)
 	struct sde_encoder_virt *sde_enc;
 	struct sde_encoder_phys *phys;
 	unsigned int i;
+	static bool first_run = true;
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder\n");
@@ -1027,6 +1028,24 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc)
 		if (phys && phys->ops.handle_post_kickoff)
 			phys->ops.handle_post_kickoff(phys);
 	}
+
+	/*
+	 * Trigger a panel reset if this is the first kickoff
+	 */
+	if (cmpxchg(&first_run, true, false)) {
+		struct sde_connector *conn = container_of(phys->connector, struct sde_connector, base);
+		struct drm_event event = {
+			.type = DRM_EVENT_PANEL_DEAD,
+			.length = sizeof(bool)
+		};
+
+		conn->panel_dead = true;
+		event.type = DRM_EVENT_PANEL_DEAD;
+		event.length = sizeof(bool);
+		msm_mode_object_event_notify(&conn->base.base,
+			conn->base.dev, &event, (u8 *) &conn->panel_dead);
+	}
+
 	SDE_ATRACE_END("encoder_kickoff");
 }
 
